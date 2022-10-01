@@ -1,0 +1,50 @@
+name: Build GDMP for Linux
+on: [workflow_dispatch]
+
+env:
+  ADDON_LIB_PATH: addons/GDMP/libs/x86-64
+  TAR_PATH: GDMP.tar
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the current repo recursively
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install depenencies
+        shell: bash
+        run: |
+          chmod +x mediapipe/setup_opencv.sh
+          ./mediapipe/setup_opencv.sh
+
+          pip3 install numpy
+
+      - name: Generate bindings
+        shell: bash
+        run: |
+          python -c "from binding_generator import *; generate_bindings('godot-cpp/godot-headers/api.json', True)"
+
+      # TODO still need to put calculator deps in GDMP/calculators.bzl beforehand
+      - name: Build GDMP
+        shell: bash
+        run: |
+          python3 setup.py
+          python3 build.py desktop
+
+      - name: Pack files
+        shell: bash
+        run: |
+          mkdir -p ${{ env.ADDON_LIB_PATH }}
+          mv mediapipe/bazel-bin/mediapipe/GDMP/*.dll ${{ env.ADDON_LIB_PATH }}
+
+          # Needed for preserving file permisions
+          tar -cvf ${{ env.TAR_PATH }} addons/GDMP
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: gdmp-linux
+          path: ${{ env.TAR_PATH }}
